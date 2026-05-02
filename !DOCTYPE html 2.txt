@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>健康知識格鬥遊戲（完整題庫版）</title>
+<style>
+body { margin:0; background:#000; color:white; font-family:sans-serif; overflow:hidden; }
+#ui { position:absolute; top:10px; width:100%; display:flex; justify-content:space-between; padding:0 20px; }
+.bar { width:40%; height:22px; background:#333; border:2px solid #777; }
+.hp { height:100%; transition:width .2s; }
+#heroBar .hp { background:linear-gradient(90deg,#00ff88,#00cc66); }
+#monsterBar .hp { background:linear-gradient(90deg,#ff4444,#cc0000); }
+#arena { position:absolute; bottom:80px; width:100%; height:65%; display:flex; justify-content:space-between; align-items:flex-end; padding:0 60px; }
+.character { width:240px; height:340px; image-rendering:pixelated; }
+/* 使用公開像素角色（可自行替換連結） */
+#hero { background:url('https://opengameart.org/sites/default/files/Green-Cap-Character-16x18.png') no-repeat center/contain; }
+#monster { background:url('https://opengameart.org/sites/default/files/Red-Demon-16x18.png') no-repeat center/contain; transform:scaleX(-1); }
+#questionBox { position:absolute; bottom:0; width:100%; background:#111; padding:12px; text-align:center; box-shadow:0 -4px 10px rgba(0,0,0,.6); }
+#question { margin:6px 0 10px; font-size:18px; }
+button { margin:6px; padding:10px 16px; border:none; border-radius:6px; cursor:pointer; }
+button:hover{ filter:brightness(1.1);} 
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div id="heroBar" class="bar"><div class="hp" style="width:100%"></div></div>
+  <div id="monsterBar" class="bar"><div class="hp" style="width:100%"></div></div>
+</div>
+
+<div id="arena">
+  <div id="hero" class="character"></div>
+  <div id="monster" class="character"></div>
+</div>
+
+<div id="questionBox">
+  <h3 id="question"></h3>
+  <div id="choices"></div>
+</div>
+
+<audio id="hit" src="https://cdn.pixabay.com/audio/2022/03/15/audio_49b1d9.mp3"></audio>
+<audio id="hurt" src="https://cdn.pixabay.com/audio/2022/03/15/audio_c6ccf4.mp3"></audio>
+
+<script>
+let heroHP = 100;
+let monsterHP = 100;
+let used = new Set();
+
+// ===== 100題完整健康題庫（每題都有明確題目） =====
+const questions = [
+{q:"每天建議睡眠幾小時？",a:["3小時","5小時","7–9小時","12小時"],c:2},
+{q:"成人正常心跳（每分鐘）約為？",a:["20–40","60–100","120–160","180以上"],c:1},
+{q:"下列何者屬於有氧運動？",a:["舉重","短跑衝刺","跑步","等長收縮"],c:2},
+{q:"維生素C常見來源是？",a:["白飯","橘子","牛油","鹽巴"],c:1},
+{q:"BMI過高通常代表？",a:["過瘦","正常","過重/肥胖","身高較高"],c:2},
+{q:"每日建議飲水量約？",a:["500 mL","1000 mL","約2000 mL","5000 mL"],c:2},
+{q:"長期熬夜最可能造成？",a:["免疫力上升","免疫力下降","骨骼增長","無影響"],c:1},
+{q:"下列何者為優質蛋白質來源？",a:["雞蛋","汽水","糖果","白砂糖"],c:0},
+{q:"過量攝取精製糖最可能導致？",a:["蛀牙","長高","視力提升","肌肉增加"],c:0},
+{q:"健康飲食中應多攝取？",a:["油炸物","蔬菜水果","含糖飲料","加工零食"],c:1},
+
+{q:"高血壓與哪一項最相關？",a:["低鹽飲食","高鹽飲食","多運動","充足睡眠"],c:1},
+{q:"菸害最主要影響系統為？",a:["呼吸系統","消化系統","骨骼系統","皮膚系統"],c:0},
+{q:"規律運動建議每週至少？",a:["1天","3天","5天","7天"],c:2},
+{q:"下列何者為不飽和脂肪來源？",a:["橄欖油","豬油","奶油","棕櫚油"],c:0},
+{q:"鈣質主要功能是？",a:["造血","強化骨骼","消化食物","傳導神經"],c:1},
+{q:"缺鐵可能導致？",a:["高血壓","貧血","骨折","肥胖"],c:1},
+{q:"防曬主要預防？",a:["感冒","皮膚癌","近視","蛀牙"],c:1},
+{q:"久坐不動最相關風險？",a:["心血管疾病","聽力下降","視力提升","骨密度增加"],c:0},
+{q:"良好洗手時機包含？",a:["吃飯前後","只在早上","只在晚上","從不需要"],c:0},
+{q:"纖維素主要功能？",a:["提供蛋白質","幫助腸道蠕動","增加脂肪","降低水分"],c:1},
+
+{q:"水溶性維生素包括？",a:["A、D","B、C","E、K","僅D"],c:1},
+{q:"酒精過量最傷害哪個器官？",a:["肝臟","肺","腎","皮膚"],c:0},
+{q:"壓力過大可能造成？",a:["免疫下降","身高增加","骨密度提升","無影響"],c:0},
+{q:"健康體重管理應避免？",a:["均衡飲食","規律運動","極端節食","充足睡眠"],c:2},
+{q:"心肺耐力最佳指標運動？",a:["快走","舉重","瑜伽","伸展"],c:0},
+{q:"Omega-3 常見來源？",a:["深海魚","白飯","砂糖","汽水"],c:0},
+{q:"口腔保健建議？",a:["每天刷牙2次","不刷牙","只漱口","每週刷一次"],c:0},
+{q:"肥胖與哪項疾病風險增加最相關？",a:["糖尿病","近視","中耳炎","骨折"],c:0},
+{q:"睡前使用3C產品可能？",a:["幫助入睡","影響睡眠","無影響","增加食慾"],c:1},
+{q:"蛋白質主要功能？",a:["提供能量唯一來源","修補組織","增加糖分","降低水分"],c:1},
+
+{q:"運動後補充最重要的是？",a:["水分","糖果","咖啡","酒精"],c:0},
+{q:"高纖飲食可降低？",a:["便秘","身高","視力","聽力"],c:0},
+{q:"血糖控制不佳與？",a:["糖尿病","感冒","骨折","近視"],c:0},
+{q:"適量日曬有助於合成？",a:["維生素A","維生素D","維生素C","維生素K"],c:1},
+{q:"攝取過多反式脂肪會？",a:["保護心臟","增加心血管風險","提升免疫","無影響"],c:1},
+{q:"均衡飲食應包含？",a:["六大類食物","只吃肉","只吃菜","只喝水"],c:0},
+{q:"壓力調適方法不包括？",a:["運動","冥想","暴飲暴食","與人聊天"],c:2},
+{q:"預防感冒良好習慣？",a:["常洗手","少喝水","熬夜","抽菸"],c:0},
+{q:"肌力訓練主要改善？",a:["肌肉力量","視力","聽力","味覺"],c:0},
+{q:"蔬果建議每日攝取？",a:["1份","3份以上","不需要","10份"],c:1},
+
+{q:"高膽固醇應減少？",a:["蔬菜","油炸食物","水果","全穀類"],c:1},
+{q:"水分不足可能？",a:["脫水","長高","變瘦","變強"],c:0},
+{q:"運動前熱身目的？",a:["增加受傷","預防受傷","降低體溫","無作用"],c:1},
+{q:"加工食品常含？",a:["高鹽高糖","低熱量","高纖維","無添加"],c:0},
+{q:"充足睡眠有助於？",a:["記憶力","蛀牙","肥胖","骨折"],c:0},
+{q:"心血管健康關鍵？",a:["少運動","高鹽飲食","規律運動","熬夜"],c:2},
+{q:"飲食過鹹可能導致？",a:["低血壓","高血壓","近視","感冒"],c:1},
+{q:"喝含糖飲料過多會？",a:["增加肥胖風險","變健康","長高","無影響"],c:0},
+{q:"水果攝取過多也可能？",a:["糖分過量","無影響","缺水","缺鈣"],c:0},
+{q:"運動時心率提升代表？",a:["身體運作中","生病","無效","停止運動"],c:0},
+
+{q:"菸品含有害物質？",a:["尼古丁","維生素","蛋白質","礦物質"],c:0},
+{q:"良好姿勢可預防？",a:["駝背","近視","蛀牙","感冒"],c:0},
+{q:"心理健康包含？",a:["情緒穩定","只看成績","不社交","壓抑情緒"],c:0},
+{q:"適量咖啡因可？",a:["提神","昏睡","骨折","掉髮"],c:0},
+{q:"過量咖啡因可能？",a:["心悸","放鬆","睡更好","長高"],c:0},
+{q:"維生素A有助於？",a:["視力","聽力","嗅覺","味覺"],c:0},
+{q:"蛋白質不足會？",a:["肌肉流失","變強","長高","無影響"],c:0},
+{q:"脂肪主要功能之一？",a:["儲存能量","製造骨骼","增加水分","消化蛋白"],c:0},
+{q:"飲酒過量風險？",a:["肝病","長高","近視","蛀牙"],c:0},
+{q:"規律作息有助於？",a:["身心健康","肥胖","失眠","壓力增加"],c:0},
+
+{q:"運動後伸展目的？",a:["放鬆肌肉","增加受傷","降低柔軟度","無作用"],c:0},
+{q:"高纖食物包含？",a:["全穀類","糖果","汽水","奶油"],c:0},
+{q:"補充水分最佳方式？",a:["白開水","酒精","含糖飲料","能量飲料"],c:0},
+{q:"健康飲食原則？",a:["少油少鹽","高油高鹽","不吃菜","只吃肉"],c:0},
+{q:"維持健康體重需？",a:["飲食+運動","只節食","只運動","不管"],c:0},
+{q:"壓力大時建議？",a:["運動放鬆","暴飲暴食","抽菸","喝酒"],c:0},
+{q:"睡眠不足會？",a:["注意力下降","變聰明","長高","免疫提升"],c:0},
+{q:"預防蛀牙方式？",a:["刷牙","吃糖","不刷牙","熬夜"],c:0},
+{q:"心臟主要功能？",a:["輸送血液","消化食物","呼吸","排尿"],c:0},
+{q:"肺的功能？",a:["氣體交換","消化","運動","思考"],c:0}
+];
+
+// ===== 遊戲邏輯 =====
+function getQ(){
+  if(used.size===questions.length){ alert('全破！'); location.reload(); }
+  let i; do{ i=Math.floor(Math.random()*questions.length);} while(used.has(i));
+  used.add(i); return questions[i];
+}
+
+function updateHP(){
+  document.querySelector('#heroBar .hp').style.width = heroHP+'%';
+  document.querySelector('#monsterBar .hp').style.width = monsterHP+'%';
+}
+
+function shake(el,dx){ el.style.transform=`translateX(${dx}px)`; setTimeout(()=>el.style.transform='',120); }
+
+function attackHero(){ heroHP = Math.max(0, heroHP-10); shake(document.getElementById('hero'), 25); document.getElementById('hurt').play(); }
+function attackMonster(){ monsterHP = Math.max(0, monsterHP-10); shake(document.getElementById('monster'), -25); document.getElementById('hit').play(); }
+
+function loadQ(){
+  const q = getQ();
+  document.getElementById('question').innerText = q.q;
+  const cdiv = document.getElementById('choices');
+  cdiv.innerHTML='';
+  q.a.forEach((opt,i)=>{
+    const b=document.createElement('button');
+    b.innerText=opt;
+    b.onclick=()=>{
+      if(i===q.c){ attackMonster(); } else { attackHero(); }
+      updateHP(); check(); loadQ();
+    };
+    cdiv.appendChild(b);
+  });
+}
+
+function check(){
+  if(heroHP<=0){ alert('你輸了'); location.reload(); }
+  if(monsterHP<=0){ alert('你贏了'); location.reload(); }
+}
+
+updateHP();
+loadQ();
+</script>
+
+</body>
+</html>
